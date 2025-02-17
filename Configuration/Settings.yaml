@@ -1,0 +1,4 @@
+Neos:
+  SymfonyMailer:
+    mailer:
+      dsn: 'native://default'
