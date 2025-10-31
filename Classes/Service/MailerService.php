@@ -16,6 +16,7 @@ namespace Neos\SymfonyMailer\Service;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\SymfonyMailer\Exception\InvalidMailerConfigurationException;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
@@ -34,13 +35,14 @@ class MailerService
      * Returns a mailer instance with the given transport or the configured default transport.
      *
      * @param TransportInterface|null $transport
+     * @param EventDispatcherInterface|null $dispatcher
      * @return Mailer
      * @throws InvalidMailerConfigurationException
      */
-    public function getMailer(TransportInterface $transport = null): Mailer
+    public function getMailer(TransportInterface $transport = null, ?EventDispatcherInterface $dispatcher = null): Mailer
     {
         if ($transport !== null) {
-            return new Mailer($transport);
+            return new Mailer($transport, null, $dispatcher);
         }
 
         // throw exception when dsn is not set
@@ -48,7 +50,7 @@ class MailerService
             throw new InvalidMailerConfigurationException('No DSN configured for Neos.SymfonyMailer', 1739540476);
         }
 
-        return new Mailer(Transport::fromDsn($this->mailerConfiguration['dsn']));
+        return new Mailer(Transport::fromDsn($this->mailerConfiguration['dsn'], $dispatcher), null, $dispatcher);
     }
 
     /**
