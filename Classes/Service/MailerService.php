@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Neos\SymfonyMailer\Service;
@@ -78,7 +79,7 @@ class MailerService
     public function createDsnFromSMTPSwiftMailerConfiguration(array $configuration): string
     {
         $transport = new EsmtpTransport(
-            host: $configuration['host'] ?? 'localhost',
+            host: urlencode($configuration['host'] ?? 'localhost'),
             port: (int)($configuration['port'] ?? 0)
         );
 
@@ -87,11 +88,11 @@ class MailerService
         }
 
         if (isset($configuration['username'])) {
-            $transport->setUsername($configuration['username']);
+            $transport->setUsername(urlencode($configuration['username']));
         }
 
         if (isset($configuration['password'])) {
-            $transport->setPassword($configuration['password']);
+            $transport->setPassword(urlencode($configuration['password']));
         }
 
         $dsn = new Transport\Dsn(
