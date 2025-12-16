@@ -37,7 +37,7 @@ class MailerService
      * @return Mailer
      * @throws InvalidMailerConfigurationException
      */
-    public function getMailer(TransportInterface $transport = null): Mailer
+    public function getMailer(?TransportInterface $transport = null): Mailer
     {
         if ($transport !== null) {
             return new Mailer($transport);
