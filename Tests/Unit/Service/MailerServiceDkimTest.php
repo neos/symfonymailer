@@ -73,6 +73,41 @@ class MailerServiceDkimTest extends TestCase
     }
 
     /**
+     * @return array<string, array{mixed}>
+     */
+    public static function emptyPassphrases(): array
+    {
+        return [
+            'null' => [null],
+            'empty string' => [''],
+            // what an unset %env:NAME% setting resolves to
+            'false' => [false],
+        ];
+    }
+
+    /**
+     * @test
+     * @dataProvider emptyPassphrases
+     */
+    public function emptyPassphraseIsAcceptedForUnencryptedKey(mixed $passphrase): void
+    {
+        $dispatcher = $this->createDispatcher($this->configuration(self::key(2048)) + ['passphrase' => $passphrase]);
+
+        self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
+    }
+
+    /**
+     * @test
+     */
+    public function emptyPassphraseIsRejectedForEncryptedKey(): void
+    {
+        $this->expectException(InvalidMailerConfigurationException::class);
+        $this->expectExceptionCode(1794473025);
+
+        $this->createDispatcher($this->configuration(self::key(2048, self::PASSPHRASE)) + ['passphrase' => false]);
+    }
+
+    /**
      * @test
      */
     public function nonArraySignerOptionsThrow(): void

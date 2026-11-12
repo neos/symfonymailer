@@ -85,7 +85,10 @@ class MailerService
             }
         }
 
-        $passphrase = $this->dkimConfiguration['passphrase'] ?? '';
+        $passphrase = $this->dkimConfiguration['passphrase'] ?? false;
+        if ($passphrase === false) {
+            $passphrase = '';
+        }
 
         if (!is_string($passphrase)) {
             throw new InvalidMailerConfigurationException(
