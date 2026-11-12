@@ -16,16 +16,24 @@ namespace Neos\SymfonyMailer\Service;
 
 use Neos\Flow\Annotations as Flow;
 use Neos\SymfonyMailer\Exception\InvalidMailerConfigurationException;
-use Symfony\Component\Mailer\Transport;
+use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Mailer\EventListener\DkimSignedMessageListener;
 use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mailer\Transport\TransportInterface;
+use Symfony\Component\Mime\Crypto\DkimSigner;
+use Symfony\Component\Mime\Exception\InvalidArgumentException as MimeInvalidArgumentException;
 
 #[Flow\Scope("singleton")]
 class MailerService
 {
     #[Flow\InjectConfiguration(path: "mailer", package: "Neos.SymfonyMailer")]
     protected array $mailerConfiguration;
+
+    #[Flow\InjectConfiguration(path: "dkim", package: "Neos.SymfonyMailer")]
+    protected ?array $dkimConfiguration = [];
 
     public const FORMAT_PLAINTEXT = 'text/plain';
     public const FORMAT_HTML = 'html';
@@ -48,7 +56,79 @@ class MailerService
             throw new InvalidMailerConfigurationException('No DSN configured for Neos.SymfonyMailer', 1739540476);
         }
 
-        return new Mailer(Transport::fromDsn($this->mailerConfiguration['dsn']));
+        return new Mailer(Transport::fromDsn($this->mailerConfiguration['dsn'], $this->createDkimSigningEventDispatcher()));
+    }
+
+    /**
+     * Returns a dispatcher that DKIM-signs every message, or null when DKIM is not configured.
+     *
+     * @throws InvalidMailerConfigurationException when DKIM is only partially configured
+     */
+    protected function createDkimSigningEventDispatcher(): ?EventDispatcherInterface
+    {
+        // `dkim: ~` in a Settings.yaml injects null, which must stay the same as not configuring DKIM.
+        $dkim = $this->dkimConfiguration ?? [];
+
+        $required = [
+            'domain' => $dkim['domain'] ?? null,
+            'selector' => $dkim['selector'] ?? null,
+            'privateKey' => $dkim['privateKey'] ?? null,
+        ];
+
+        if (count(array_filter($required, static fn ($value) => $value !== null && $value !== '')) === 0) {
+            return null;
+        }
+
+        foreach ($required as $name => $value) {
+            if (!is_string($value) || trim($value) === '') {
+                throw new InvalidMailerConfigurationException(
+                    sprintf('Missing or invalid DKIM configuration "%s" for Neos.SymfonyMailer.', $name),
+                    1762900001
+                );
+            }
+        }
+
+        $passphrase = $dkim['passphrase'] ?? false;
+        if ($passphrase === false) {
+            $passphrase = '';
+        }
+
+        if (!is_string($passphrase)) {
+            throw new InvalidMailerConfigurationException(
+                'Invalid DKIM passphrase configuration for Neos.SymfonyMailer.',
+                1794473054
+            );
+        }
+
+        $signerOptions = $dkim['signerOptions'] ?? [];
+        if (!is_array($signerOptions)) {
+            throw new InvalidMailerConfigurationException(
+                'Invalid DKIM signerOptions configuration for Neos.SymfonyMailer.',
+                1794473322
+            );
+        }
+
+        try {
+            $signer = new DkimSigner(
+                $required['privateKey'],
+                $required['domain'],
+                $required['selector'],
+                $signerOptions,
+                $passphrase,
+            );
+        } catch (\LogicException | MimeInvalidArgumentException $e) {
+            // DkimSigner itself reports a missing OpenSSL extension, an unreadable key and a wrong passphrase.
+            throw new InvalidMailerConfigurationException(
+                'Invalid DKIM configuration for Neos.SymfonyMailer: ' . $e->getMessage(),
+                1794473025,
+                $e
+            );
+        }
+
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addSubscriber(new DkimSignedMessageListener($signer));
+
+        return $dispatcher;
     }
 
     /**

@@ -33,6 +33,34 @@ If you migrate from Swiftmailer, you can use the following command to generate t
 ./flow symfonymailer:migrate:generatedsnfromswiftmailer
 ```
 
+DKIM signing
+------------
+
+Messages sent through `MailerService::getMailer()` are signed with Symfony's `DkimSigner` as soon as
+`domain`, `selector` and `privateKey` are all configured. Setting only some of them throws an
+`InvalidMailerConfigurationException`, so a half-finished setup does not silently send unsigned mail. The same
+exception is thrown when the private key cannot be loaded (unreadable, not PEM, wrong `passphrase`) or the PHP
+OpenSSL extension is missing.
+
+```yaml
+Neos:
+  SymfonyMailer:
+    dkim:
+      domain: 'example.com'
+      selector: 'default'
+      privateKey: 'file:///path/to/dkim.private.key' # or the PEM text itself
+      passphrase: null
+      signerOptions: []                              # passed to Symfony's DkimSigner, e.g. `algorithm`
+```
+
+`signerOptions` are handed to Symfony as they are and are only checked when a message is signed, so a typo in
+them (an unknown `algorithm`, or an Ed25519 algorithm with an RSA key) shows up on the first mail sent, not when the
+mailer is created. Send a test mail after changing them.
+
+The `domain` must match the domain of the From address, otherwise DMARC sees the signature as unaligned. Publish
+the matching public key as a TXT record at `<selector>._domainkey.<domain>`. A mailer created with an explicitly
+passed transport is not signed.
+
 Usage
 -----
 
