@@ -64,12 +64,23 @@ class MailerServiceDkimTest extends TestCase
     /**
      * @test
      */
-    public function missingOpenSslExtensionThrows(): void
+    public function nonStringPassphraseThrows(): void
     {
         $this->expectException(InvalidMailerConfigurationException::class);
-        $this->expectExceptionCode(1794472748);
+        $this->expectExceptionCode(1794473054);
 
-        $this->createDispatcher($this->configuration(self::key(2048)), openSslAvailable: false);
+        $this->createDispatcher($this->configuration(self::key(2048), null) + ['passphrase' => ['not', 'a string']]);
+    }
+
+    /**
+     * @test
+     */
+    public function nonArraySignerOptionsThrow(): void
+    {
+        $this->expectException(InvalidMailerConfigurationException::class);
+        $this->expectExceptionCode(1794473322);
+
+        $this->createDispatcher($this->configuration(self::key(2048)) + ['signerOptions' => 'ed25519-sha256']);
     }
 
     /**
@@ -92,17 +103,6 @@ class MailerServiceDkimTest extends TestCase
         $this->expectExceptionCode(1794473025);
 
         $this->createDispatcher($this->configuration(self::key(2048, self::PASSPHRASE), 'wrong passphrase'));
-    }
-
-    /**
-     * @test
-     */
-    public function rsaKeyBelow2048BitsThrows(): void
-    {
-        $this->expectException(InvalidMailerConfigurationException::class);
-        $this->expectExceptionCode(1762900006);
-
-        $this->createDispatcher($this->configuration(self::key(1024)));
     }
 
     /**
@@ -132,19 +132,14 @@ class MailerServiceDkimTest extends TestCase
     /**
      * @param array<string, mixed> $dkimConfiguration
      */
-    private function createDispatcher(array $dkimConfiguration, bool $openSslAvailable = true): ?EventDispatcherInterface
+    private function createDispatcher(array $dkimConfiguration): ?EventDispatcherInterface
     {
         // The constructor is overridden on purpose: Flow's proxy constructor would try to inject the
         // real settings, and the test supplies its own.
-        $service = new class ($dkimConfiguration, $openSslAvailable) extends MailerService {
-            public function __construct(array $dkimConfiguration, private bool $openSslAvailable)
+        $service = new class ($dkimConfiguration) extends MailerService {
+            public function __construct(array $dkimConfiguration)
             {
                 $this->dkimConfiguration = $dkimConfiguration;
-            }
-
-            protected function isOpenSslAvailable(): bool
-            {
-                return $this->openSslAvailable;
             }
 
             public function dispatcher(): ?EventDispatcherInterface

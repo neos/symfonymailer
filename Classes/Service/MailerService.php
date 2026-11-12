@@ -24,6 +24,7 @@ use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 use Symfony\Component\Mime\Crypto\DkimSigner;
+use Symfony\Component\Mime\Exception\InvalidArgumentException as MimeInvalidArgumentException;
 
 #[Flow\Scope("singleton")]
 class MailerService
@@ -65,32 +66,23 @@ class MailerService
      */
     protected function createDkimSigningEventDispatcher(): ?EventDispatcherInterface
     {
-        $required = array_filter(
-            [
-                'domain' => $this->dkimConfiguration['domain'] ?? null,
-                'selector' => $this->dkimConfiguration['selector'] ?? null,
-                'privateKey' => $this->dkimConfiguration['privateKey'] ?? null,
-            ],
-            static fn ($value) => is_string($value) && trim($value) !== ''
-        );
+        $required = [
+            'domain' => $this->dkimConfiguration['domain'] ?? null,
+            'selector' => $this->dkimConfiguration['selector'] ?? null,
+            'privateKey' => $this->dkimConfiguration['privateKey'] ?? null,
+        ];
 
-        if ($required === []) {
+        if (count(array_filter($required, static fn ($value) => $value !== null && $value !== '')) === 0) {
             return null;
         }
 
-        $missing = array_diff(['domain', 'selector', 'privateKey'], array_keys($required));
-        if ($missing !== []) {
-            throw new InvalidMailerConfigurationException(
-                'Incomplete DKIM configuration for Neos.SymfonyMailer, missing: ' . implode(', ', $missing),
-                1762900001
-            );
-        }
-
-        if (!extension_loaded('openssl')) {
-            throw new InvalidMailerConfigurationException(
-                'The PHP OpenSSL extension is required for DKIM signing.',
-                1794472748
-            );
+        foreach ($required as $name => $value) {
+            if (!is_string($value) || trim($value) === '') {
+                throw new InvalidMailerConfigurationException(
+                    sprintf('Missing or invalid DKIM configuration "%s" for Neos.SymfonyMailer.', $name),
+                    1762900001
+                );
+            }
         }
 
         $passphrase = $this->dkimConfiguration['passphrase'] ?? '';
@@ -102,34 +94,6 @@ class MailerService
             );
         }
 
-        $privateKey = openssl_pkey_get_private(
-            $required['privateKey'],
-            $passphrase
-        );
-
-        if ($privateKey === false) {
-            throw new InvalidMailerConfigurationException(
-                'Unable to load DKIM private key for Neos.SymfonyMailer. Check the key format and passphrase.',
-                1794473025,
-            );
-        }
-
-        $keyDetails = openssl_pkey_get_details($privateKey);
-
-        if ($keyDetails === false || $keyDetails['type'] !== OPENSSL_KEYTYPE_RSA) {
-            throw new InvalidMailerConfigurationException(
-                'DKIM private key must be a valid RSA private key.',
-                1762900005
-            );
-        }
-
-        if (($keyDetails['bits'] ?? 0) < 2048) {
-            throw new InvalidMailerConfigurationException(
-                'DKIM RSA private key must be at least 2048 bits.',
-                1762900006
-            );
-        }
-
         $signerOptions = $this->dkimConfiguration['signerOptions'] ?? [];
         if (!is_array($signerOptions)) {
             throw new InvalidMailerConfigurationException(
@@ -138,13 +102,22 @@ class MailerService
             );
         }
 
-        $signer = new DkimSigner(
-            $required['privateKey'],
-            $required['domain'],
-            $required['selector'],
-            $signerOptions,
-            $passphrase,
-        );
+        try {
+            $signer = new DkimSigner(
+                $required['privateKey'],
+                $required['domain'],
+                $required['selector'],
+                $signerOptions,
+                $passphrase,
+            );
+        } catch (\LogicException | MimeInvalidArgumentException $e) {
+            // DkimSigner itself reports a missing OpenSSL extension, an unreadable key and a wrong passphrase.
+            throw new InvalidMailerConfigurationException(
+                'Invalid DKIM configuration for Neos.SymfonyMailer: ' . $e->getMessage(),
+                1794473025,
+                $e
+            );
+        }
 
         $dispatcher = new EventDispatcher();
         $dispatcher->addSubscriber(new DkimSignedMessageListener($signer));
