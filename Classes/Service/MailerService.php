@@ -33,7 +33,7 @@ class MailerService
     protected array $mailerConfiguration;
 
     #[Flow\InjectConfiguration(path: "dkim", package: "Neos.SymfonyMailer")]
-    protected array $dkimConfiguration = [];
+    protected ?array $dkimConfiguration = [];
 
     public const FORMAT_PLAINTEXT = 'text/plain';
     public const FORMAT_HTML = 'html';
@@ -66,10 +66,13 @@ class MailerService
      */
     protected function createDkimSigningEventDispatcher(): ?EventDispatcherInterface
     {
+        // `dkim: ~` in a Settings.yaml injects null, which must stay the same as not configuring DKIM.
+        $dkim = $this->dkimConfiguration ?? [];
+
         $required = [
-            'domain' => $this->dkimConfiguration['domain'] ?? null,
-            'selector' => $this->dkimConfiguration['selector'] ?? null,
-            'privateKey' => $this->dkimConfiguration['privateKey'] ?? null,
+            'domain' => $dkim['domain'] ?? null,
+            'selector' => $dkim['selector'] ?? null,
+            'privateKey' => $dkim['privateKey'] ?? null,
         ];
 
         if (count(array_filter($required, static fn ($value) => $value !== null && $value !== '')) === 0) {
@@ -85,7 +88,7 @@ class MailerService
             }
         }
 
-        $passphrase = $this->dkimConfiguration['passphrase'] ?? false;
+        $passphrase = $dkim['passphrase'] ?? false;
         if ($passphrase === false) {
             $passphrase = '';
         }
@@ -97,7 +100,7 @@ class MailerService
             );
         }
 
-        $signerOptions = $this->dkimConfiguration['signerOptions'] ?? [];
+        $signerOptions = $dkim['signerOptions'] ?? [];
         if (!is_array($signerOptions)) {
             throw new InvalidMailerConfigurationException(
                 'Invalid DKIM signerOptions configuration for Neos.SymfonyMailer.',

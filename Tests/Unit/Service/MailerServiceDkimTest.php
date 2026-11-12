@@ -37,6 +37,14 @@ class MailerServiceDkimTest extends TestCase
     }
 
     /**
+     * @test
+     */
+    public function nullConfigurationBlockReturnsNull(): void
+    {
+        self::assertNull($this->createDispatcher(null));
+    }
+
+    /**
      * @return array<string, array{array<string, string>}>
      */
     public static function incompleteConfigurations(): array
@@ -165,14 +173,14 @@ class MailerServiceDkimTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $dkimConfiguration
+     * @param array<string, mixed>|null $dkimConfiguration
      */
-    private function createDispatcher(array $dkimConfiguration): ?EventDispatcherInterface
+    private function createDispatcher(?array $dkimConfiguration): ?EventDispatcherInterface
     {
         // The constructor is overridden on purpose: Flow's proxy constructor would try to inject the
         // real settings, and the test supplies its own.
         $service = new class ($dkimConfiguration) extends MailerService {
-            public function __construct(array $dkimConfiguration)
+            public function __construct(?array $dkimConfiguration)
             {
                 $this->dkimConfiguration = $dkimConfiguration;
             }
