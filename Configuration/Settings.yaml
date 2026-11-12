@@ -2,3 +2,10 @@ Neos:
   SymfonyMailer:
     mailer:
       dsn: 'native://default'
+    dkim:
+      domain: null
+      selector: null
+      # PEM text, or `file:///absolute/path/to/private.key`
+      privateKey: null
+      passphrase: null
+      signerOptions: []
